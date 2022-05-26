@@ -27,7 +27,7 @@ class Ball:
         ball_shape.collision_type = collision_type
         self.velocity = pymunk.Vec2d(0, 0)
         self.shape = ball_shape
-        self.shape.color = (0, 0, 255, 255)
+        self.shape.color = (169, 0, 0, 255)
 
     def set_position(self, position):
         self.shape.body.position = self.set_position(position)
@@ -35,7 +35,7 @@ class Ball:
 class CueBall(Ball):
     def __init__(self, position, collision_type=2):
         super().__init__(position, collision_type=collision_type)
-        self.shape.color = (255, 0, 0, 255)
+        self.shape.color = (255, 255, 255, 255)
 
 def initialize_border(space):
     t = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -44,6 +44,7 @@ def initialize_border(space):
     t.position = (WORLD_DIMS[0]/2, WORLD_DIMS[1])
     ts = pymunk.Poly.create_box(body=t, size=(WORLD_DIMS[0], BALL_RADIUS))
     ts.collision_type = 3
+    ts.color = (75, 55, 28, 255)
 
     b = pymunk.Body(body_type=pymunk.Body.STATIC)
     b.elasticity = GATE_ELASTICITY
@@ -51,6 +52,7 @@ def initialize_border(space):
     b.position = (WORLD_DIMS[0]/2, 0)
     bs = pymunk.Poly.create_box(body=b, size=(WORLD_DIMS[0], BALL_RADIUS))
     bs.collision_type = 3
+    bs.color = (75, 55, 28, 255)
 
     l = pymunk.Body(body_type=pymunk.Body.STATIC)
     l.elasticity = GATE_ELASTICITY
@@ -58,6 +60,7 @@ def initialize_border(space):
     l.position = (0, WORLD_DIMS[1]/2)
     ls = pymunk.Poly.create_box(body=l, size=(BALL_RADIUS, WORLD_DIMS[1]))
     ls.collision_type = 4
+    ls.color = (75, 55, 28, 255)
 
     r = pymunk.Body(body_type=pymunk.Body.STATIC)
     r.elasticity = GATE_ELASTICITY
@@ -65,6 +68,7 @@ def initialize_border(space):
     r.position = (WORLD_DIMS[0], WORLD_DIMS[1]/2)
     rs = pymunk.Poly.create_box(body=r, size=(BALL_RADIUS, WORLD_DIMS[1]))
     rs.collision_type = 4
+    rs.color = (75, 55, 28, 255)
 
     space.add(ts, bs, ls, rs)
     space.add(t, b, l, r)
@@ -76,6 +80,7 @@ def initialize_holes(space):
         hole.position = (WORLD_DIMS[0] * ((i % 3)/2), WORLD_DIMS[1] * (i//3))
         hole_shape = pymunk.Circle(bot_body, radius=BALL_RADIUS * 1.5)
         hole_shape.collision_type = 5
+        hole_shape.color = (0, 0, 0, 255)
         space.add(hole, hole_shape)
 
 
@@ -98,11 +103,14 @@ def elastic_collision(b1, b2):
     b2.velocity = pymunk.Vec2d(v2xf, v2yf)
     return True
 
+def apply_friction(b, f):
+    b.velocity = pymunk.Vec2d(b.velocity[0], b.velocity[1])
 
 def main():
     dt = 0.01
     pygame.init()
     screen = pygame.display.set_mode(WORLD_DIMS)
+    screen.fill((0, 102, 0))
     clock = pygame.time.Clock()
     running = True
     draw_options = pymunk.pygame_util.DrawOptions(screen)
@@ -114,7 +122,7 @@ def main():
 
     balls = []
 
-    cueball = CueBall(position=(1000, 300 - BALL_RADIUS * .4))
+    cueball = CueBall(position=(1000, 300))
     space.add(cueball.shape, cueball.shape.body)
     # cueball.shape.body.velocity = pymunk.Vec2d(-100, 0)
     cueball.velocity = pymunk.Vec2d(-100, 0)
@@ -122,8 +130,8 @@ def main():
 
     for i in range(1, 6, 1):
         for j in range(1, i + 1, 1):
-            x = (3 - i) * BALL_RADIUS * 2.2 + 300
-            y = (j - 3) * BALL_RADIUS * 2.2 + 300 + ((5 - i) * BALL_RADIUS)
+            x = (3 - i) * BALL_RADIUS * 2.1 + 300
+            y = (j - 3) * BALL_RADIUS * 2.1 + 300 + ((5 - i) * BALL_RADIUS)
             # x = ((j % 5) - (5 / 2) + 0.5) * BALL_RADIUS * 2 + 300
             # y = ((j // 5) - (5 / 2) + 0.5) * BALL_RADIUS * 2 + 300
             ball = Ball(position=(x, y))
@@ -150,19 +158,19 @@ def main():
     #     b2.velocity = pymunk.Vec2d(v2xf, v2yf)
     #     return True
 
-    def wall_collision_top_bottom(arbiter, space, body):
-        s1 = arbiter.shapes[0]
-        b1 = s1.body
-        v1x, v1y = b1.velocity
-        b1.velocity = pymunk.Vec2d(v1x, -1 * v1y)
-        return True
-
-    def wall_collision_left_right(arbiter, space, body):
-        s1 = arbiter.shapes[0]
-        b1 = s1.body
-        v1x, v1y = b1.velocity
-        b1.velocity = pymunk.Vec2d(-1 * v1x, v1y)
-        return True
+    # def wall_collision_top_bottom(arbiter, space, body):
+    #     s1 = arbiter.shapes[0]
+    #     b1 = s1.body
+    #     v1x, v1y = b1.velocity
+    #     b1.velocity = pymunk.Vec2d(v1x, -1 * v1y)
+    #     return True
+    #
+    # def wall_collision_left_right(arbiter, space, body):
+    #     s1 = arbiter.shapes[0]
+    #     b1 = s1.body
+    #     v1x, v1y = b1.velocity
+    #     b1.velocity = pymunk.Vec2d(-1 * v1x, v1y)
+    #     return True
 
     def hole_collision(arbiter, space, body):
         s1 = arbiter.shapes[0]
@@ -187,9 +195,9 @@ def main():
     #
     # ball_collision = space.add_collision_handler(2, 4)
     # ball_collision.pre_solve = wall_collision_left_right
-    #
-    # ball_collision = space.add_collision_handler(1, 5)
-    # ball_collision.pre_solve = hole_collision
+
+    ball_collision = space.add_collision_handler(1, 5)
+    ball_collision.pre_solve = hole_collision
 
     kes = []
     while running:
@@ -205,16 +213,16 @@ def main():
                 elastic_collision(pair[0], pair[1])
 
         for ball in balls:
-            if ball.shape.body.position[0] < 2.1 * BALL_RADIUS:
+            if ball.shape.body.position[0] <= 1.5 * BALL_RADIUS:
                 ball.velocity = (-1 * ball.velocity[0], ball.velocity[1])
-            if ball.shape.body.position[0] > 1200 - 2.1 * BALL_RADIUS:
+            if ball.shape.body.position[0] >= 1200 - 1.5 * BALL_RADIUS:
                 ball.velocity = (-1 * ball.velocity[0], ball.velocity[1])
-            if ball.shape.body.position[1] < 600 - 2.1 * BALL_RADIUS:
+            if ball.shape.body.position[1] <= 600 - 1.5 * BALL_RADIUS:
                 ball.velocity = (ball.velocity[0], -1 * ball.velocity[1])
-            if ball.shape.body.position[1] > 2.1 * BALL_RADIUS:
+            if ball.shape.body.position[1] >= 1.5 * BALL_RADIUS:
                 ball.velocity = (ball.velocity[0], -1 * ball.velocity[1])
 
-        screen.fill((255, 255, 255))
+        screen.fill((0, 102, 0))
         space.debug_draw(draw_options)
         pygame.display.update()
         space.step(dt)
