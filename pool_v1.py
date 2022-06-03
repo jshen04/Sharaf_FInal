@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import itertools
+import random
 
 BALL_MASS = 1
 BALL_RADIUS = 25
@@ -20,7 +21,7 @@ GATE_FRICTION = 0
 FRICTION_FORCE = 1
 
 class Ball:
-    def __init__(self, position, collision_type=1):
+    def __init__(self, position, design, collision_type=1):
         ball_body = pymunk.Body(mass=BALL_MASS, moment=math.inf)
         # ball_body = pymunk.Body(mass=BALL_MASS, moment=pymunk.moment_for_circle(BALL_MASS, 0, BALL_RADIUS))
         ball_body.position = position
@@ -30,15 +31,23 @@ class Ball:
         ball_shape.collision_type = collision_type
         self.velocity = pymunk.Vec2d(0, 0)
         self.shape = ball_shape
-        self.shape.color = (169, 0, 0, 255)
+        self.design = design # either solid (0), striped (1), or eight ball (8), or cue ball (-1)
+        if self.design == 0:
+            self.shape.color = (169, 0, 0, 255)
+        if self.design == 1:
+            self.shape.color = (0, 0, 169, 255)
+        if self.design == 8:
+            self.shape.color = (0, 0, 0, 255)
+        if self.design == -1:
+            self.shape.color = (255, 255, 255, 255)
+
 
     def set_position(self, position):
         self.shape.body.position = self.set_position(position)
 
 class CueBall(Ball):
-    def __init__(self, position, collision_type=2):
-        super().__init__(position, collision_type=collision_type)
-        self.shape.color = (255, 255, 255, 255)
+    def __init__(self, position, design=-1, collision_type=2):
+        super().__init__(position, design=design, collision_type=collision_type)
 
 def initialize_border(space):
     t = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -104,15 +113,6 @@ def elastic_collision(b1, b2):
 
     b1.velocity = v1f
     b2.velocity = v2f
-
-    # v1xf = ((m1 - m2) / (m1 + m2)) * v1x + ((2 * m2) / (m1 + m2)) * v2x
-    # v2xf = ((2 * m1) / (m1 + m2)) * v1x - ((m1 - m2) / (m1 + m2)) * v2x
-    #
-    # v1yf = ((m1 - m2) / (m1 + m2)) * v1y + ((2 * m2) / (m1 + m2)) * v2y
-    # v2yf = ((2 * m1) / (m1 + m2)) * v1y - ((m1 - m2) / (m1 + m2)) * v2y
-    #
-    # b1.velocity = pymunk.Vec2d(v1xf, v1yf)
-    # b2.velocity = pymunk.Vec2d(v2xf, v2yf)
     return True
 
 def friction(b, friction_accel_magnitude, dt):
@@ -121,6 +121,14 @@ def friction(b, friction_accel_magnitude, dt):
         b.velocity = (b.velocity[0] - friction_accel_magnitude * dt * b.velocity[0] / v, b.velocity[1] - friction_accel_magnitude * dt * b.velocity[1] / v)
     if abs(v) <= 0.01:
         b.velocity = (0, 0)
+
+class player:
+    def __init__(self, ix):
+        self.ix = ix
+        self.turn = False
+        self.design = None
+        self.olddesign = None
+
 
 def main():
     dt = 0.01
@@ -140,35 +148,95 @@ def main():
 
     cueball = CueBall(position=(1000, 300))
     space.add(cueball.shape, cueball.shape.body)
-    # cueball.shape.body.velocity = pymunk.Vec2d(-100, 0)
-    cueball.velocity = pymunk.Vec2d(-100, 0)
     balls.append(cueball)
 
+    ix = 0
+    ixs = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    solids = np.random.choice(ixs, 7, replace=False)
     for i in range(1, 6, 1):
         for j in range(1, i + 1, 1):
+            if ix == 4:
+                design = 8
+            elif ix in solids:
+                design = 0
+            else:
+                design = 1
+            ix = ix + 1
             x = (3 - i) * BALL_RADIUS * 1.05 * math.sqrt(3) + 300
             y = (j - 3) * BALL_RADIUS * 2 * 1.05 + 300 + ((5 - i) * BALL_RADIUS * 1.05)
-            ball = Ball(position=(x, y))
+            ball = Ball(position=(x, y), design=design)
             space.add(ball.shape, ball.shape.body)
             balls.append(ball)
 
-    kes = []
+    # kes = []
     ke = 0
-    xs = []
-    ys = []
+    # xs = []
+    # ys = []
+    new_iter = True
     for ball in balls:
         ke = ke + .5 * ball.shape.body.mass * (np.linalg.norm(ball.velocity) ** 2)
+
+    solids = list(filter(None, [b if b.design == 0 else None for b in balls]))
+    stripes = list(filter(None, [b if b.design == 1 else None for b in balls]))
+    eightball = list(filter(None, [b if b.design == 8 else None for b in balls]))
+
+    oldsolids = len(solids)
+    oldstripes = len(stripes)
+    oldeightball = len(eightball)
+
+    p1 = player(1)
+    p2 = player(2)
+    p1.turn = True
+
+    # indicates type of target ball (0 for solid 1 for stripe)
+    player1 = -1
+    player2 = -1
+
+    # 1 for player 1, 2 for player 2
+    togo = 1
+
+    turn = 0
+    trigger = False
     while running:
         for event in pygame.event.get():
             if len(balls) == 1:
                 running = False
             elif ke == 0:
-                running = False
+                new_iter = True
             elif event.type == QUIT or (event.type == KEYDOWN and event.key in (K_q, K_ESCAPE)):
                 running = False
             elif event.type == KEYDOWN and event.key == K_s:
                 # Start/stop simulation.
                 running = not running
+
+            if new_iter:
+                if p1.turn:
+                    print("Player 1 to move")
+                if p2.turn:
+                    print("Player 2 to move")
+                new_pos = pymunk.pygame_util.get_mouse_pos(screen)
+                diff = new_pos - cueball.shape.body.position
+                dx, dy = diff[0], diff[1]
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    turn = turn + 1
+                    oldeightball = len(eightball)
+                    oldsolids = len(solids)
+                    oldstripes = len(stripes)
+
+                    if type(p1.design) == list:
+                        p1.olddesign = len(p1.design)
+                    if type(p2.design) == list:
+                        p2.olddesign = len(p2.design)
+                    if dx**2 + dy**2 >= 10000:
+                        h = ((dx ** 2) + (dy ** 2)) ** 0.5
+                        if not h == 0:
+                            dx = 100 * dx / h
+                            dy = 100 * dy / h
+                            cueball.velocity = dx, dy
+                            new_iter = False
+                    else:
+                        cueball.velocity = dx, dy
+                        new_iter = False
 
         contact_pairs = []
         for pair in itertools.combinations(balls, 2):
@@ -184,21 +252,57 @@ def main():
             if ((x)**2)+((y)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             elif ((x-600)**2)+((y)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             elif ((x-1200)**2)+((y)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             elif ((x)**2)+((y-600)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             elif ((x-600)**2)+((y-600)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             elif ((x-1200)**2)+((y-600)**2) <= (2.5*BALL_RADIUS)**2 and not type(ball) == CueBall:
                 space.remove(ball.shape.body, ball.shape)
                 balls.remove(ball)
+                if ball in solids:
+                    solids.remove(ball)
+                if ball in stripes:
+                    stripes.remove(ball)
+                if ball in eightball:
+                    eightball.remove(ball)
             else:
                 if x <= 1.5 * BALL_RADIUS:
                     ball.velocity = (-1 * ball.velocity[0], ball.velocity[1])
@@ -210,28 +314,36 @@ def main():
                     ball.velocity = (ball.velocity[0], -1 * ball.velocity[1])
                 friction(ball, FRICTION_FORCE/ball.shape.body.mass, dt)
 
+                # if type(p1.design) == list:
+                #     if p1.olddesign - len(p1.design) > 0 and p1.turn:
+                #         p1.turn = p1.turn
+                #         p2.turn = p2.turn
+                # if type(p2.design) == list:
+                #     if p2.olddesign - len(p2.design) > 0 and p2.turn:
+                #         p1.turn = p1.turn
+                #         p2.turn = p2.turn
+
         screen.fill((0, 102, 0))
         space.debug_draw(draw_options)
         pygame.display.update()
         space.step(dt)
         ke = 0
-        x = 0
-        y = 0
-        n = len(balls)
+        # x = 0
+        # y = 0
+        # n = len(balls)
         for ball in balls:
             ball.shape.body.position = (ball.shape.body.position[0] + ball.velocity[0] * dt, ball.shape.body.position[1] + ball.velocity[1] * dt)
             ke = ke + .5 * ball.shape.body.mass * (np.linalg.norm(ball.velocity) ** 2)
-            x = x + ball.shape.body.position[0]
-            y = y + ball.shape.body.position[1]
-        xs.append(x/n)
-        ys.append(y/n)
-        kes.append(ke)
-
-    plt.plot(kes)
-    plt.show()
-
-    plt.plot(xs, ys)
-    plt.show()
+    #         x = x + ball.shape.body.position[0]
+    #         y = y + ball.shape.body.position[1]
+    #     xs.append(x/n)
+    #     ys.append(y/n)
+    #     kes.append(ke)
+    # plt.plot(kes)
+    # plt.show()
+    #
+    # plt.plot(xs, ys)
+    # plt.show()
 
 if __name__ == '__main__':
     main()
