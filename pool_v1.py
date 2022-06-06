@@ -21,7 +21,7 @@ GATE_FRICTION = 0
 FRICTION_FORCE = 1
 
 class Ball:
-    def __init__(self, position, design, collision_type=1):
+    def __init__(self, position, surface, design, collision_type=1):
         ball_body = pymunk.Body(mass=BALL_MASS, moment=math.inf)
         # ball_body = pymunk.Body(mass=BALL_MASS, moment=pymunk.moment_for_circle(BALL_MASS, 0, BALL_RADIUS))
         ball_body.position = position
@@ -31,7 +31,7 @@ class Ball:
         ball_shape.collision_type = collision_type
         self.velocity = pymunk.Vec2d(0, 0)
         self.shape = ball_shape
-        self.design = design # either solid (0), striped (1), or eight ball (8), or cue ball (-1)
+        self.design = design  # either solid (0), striped (1), or eight ball (8), or cue ball (-1)
         if self.design == 0:
             self.shape.color = (169, 0, 0, 255)
         if self.design == 1:
@@ -40,14 +40,15 @@ class Ball:
             self.shape.color = (0, 0, 0, 255)
         if self.design == -1:
             self.shape.color = (255, 255, 255, 255)
+        self.surface = surface
 
 
     def set_position(self, position):
         self.shape.body.position = self.set_position(position)
 
 class CueBall(Ball):
-    def __init__(self, position, design=-1, collision_type=2):
-        super().__init__(position, design=design, collision_type=collision_type)
+    def __init__(self, position, surface, design=-1, collision_type=2):
+        super().__init__(position, surface=surface, design=design, collision_type=collision_type)
 
 def initialize_border(space):
     t = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -126,18 +127,45 @@ class player:
     def __init__(self, ix):
         self.ix = ix
         self.turn = False
-        self.design = None
-        self.olddesign = None
+        self.ball_type = None
+        self.prev_len = 7
+        self.text = ""
 
 
 def main():
     dt = 0.01
     pygame.init()
-    screen = pygame.display.set_mode(WORLD_DIMS)
+    pygame.font.init()
+    my_font = pygame.font.SysFont('Comic Sans MS', 30)
+    small_font = pygame.font.SysFont('Comic Sans MS', 20)
+    screen = pygame.display.set_mode((WORLD_DIMS[0], WORLD_DIMS[1] + 150))
     screen.fill((0, 102, 0))
     clock = pygame.time.Clock()
     running = True
     draw_options = pymunk.pygame_util.DrawOptions(screen)
+    pymunk.pygame_util.positive_y_is_up = False
+
+    solid1surface = pygame.image.load("balls/solids/solid1.png")
+    solid2surface = pygame.image.load("balls/solids/solid2.png")
+    solid3surface = pygame.image.load("balls/solids/solid3.png")
+    solid4surface = pygame.image.load("balls/solids/solid4.png")
+    solid5surface = pygame.image.load("balls/solids/solid5.png")
+    solid6surface = pygame.image.load("balls/solids/solid6.png")
+    solid7surface = pygame.image.load("balls/solids/solid7.png")
+    solidsurfaces = [solid1surface, solid2surface, solid3surface, solid4surface, solid5surface, solid6surface, solid7surface]
+
+    eightballsurface = pygame.image.load("balls/8ball.png")
+
+    stripe9surface = pygame.image.load("balls/stripes/stripe9.png")
+    stripe10surface = pygame.image.load("balls/stripes/stripe10.png")
+    stripe11surface = pygame.image.load("balls/stripes/stripe11.png")
+    stripe12surface = pygame.image.load("balls/stripes/stripe12.png")
+    stripe13surface = pygame.image.load("balls/stripes/stripe13.png")
+    stripe14surface = pygame.image.load("balls/stripes/stripe14.png")
+    stripe15surface = pygame.image.load("balls/stripes/stripe15.png")
+    stripesurfaces = [stripe9surface, stripe10surface, stripe11surface, stripe12surface, stripe13surface, stripe14surface, stripe15surface]
+
+    cueballsurface = pygame.image.load("balls/cueball.png")
 
     space = pymunk.Space(WORLD_DIMS)
     space.gravity = 0, 0
@@ -146,7 +174,7 @@ def main():
 
     balls = []
 
-    cueball = CueBall(position=(1000, 300))
+    cueball = CueBall(position=(1000, 300), surface=cueballsurface)
     space.add(cueball.shape, cueball.shape.body)
     balls.append(cueball)
 
@@ -157,14 +185,17 @@ def main():
         for j in range(1, i + 1, 1):
             if ix == 4:
                 design = 8
+                surface = eightballsurface
             elif ix in solids:
                 design = 0
+                surface = solidsurfaces.pop(0)
             else:
                 design = 1
+                surface = stripesurfaces.pop(0)
             ix = ix + 1
             x = (3 - i) * BALL_RADIUS * 1.05 * math.sqrt(3) + 300
             y = (j - 3) * BALL_RADIUS * 2 * 1.05 + 300 + ((5 - i) * BALL_RADIUS * 1.05)
-            ball = Ball(position=(x, y), design=design)
+            ball = Ball(position=(x, y), surface=surface, design=design)
             space.add(ball.shape, ball.shape.body)
             balls.append(ball)
 
@@ -180,23 +211,15 @@ def main():
     stripes = list(filter(None, [b if b.design == 1 else None for b in balls]))
     eightball = list(filter(None, [b if b.design == 8 else None for b in balls]))
 
-    oldsolids = len(solids)
-    oldstripes = len(stripes)
-    oldeightball = len(eightball)
+    prev_solids_len = len(solids)
+    prev_stripes_len = len(stripes)
 
     p1 = player(1)
     p2 = player(2)
     p1.turn = True
 
-    # indicates type of target ball (0 for solid 1 for stripe)
-    player1 = -1
-    player2 = -1
-
-    # 1 for player 1, 2 for player 2
-    togo = 1
-
-    turn = 0
     trigger = False
+    winner = 0
     while running:
         for event in pygame.event.get():
             if len(balls) == 1:
@@ -210,23 +233,20 @@ def main():
                 running = not running
 
             if new_iter:
-                if p1.turn:
-                    print("Player 1 to move")
-                if p2.turn:
-                    print("Player 2 to move")
                 new_pos = pymunk.pygame_util.get_mouse_pos(screen)
                 diff = new_pos - cueball.shape.body.position
                 dx, dy = diff[0], diff[1]
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    turn = turn + 1
-                    oldeightball = len(eightball)
-                    oldsolids = len(solids)
-                    oldstripes = len(stripes)
+                    prev_solids_len = len(solids)
+                    prev_stripes_len = len(stripes)
 
-                    if type(p1.design) == list:
-                        p1.olddesign = len(p1.design)
-                    if type(p2.design) == list:
-                        p2.olddesign = len(p2.design)
+                    if type(p1.ball_type) == list:
+                        p1.prev_len = len(p1.ball_type)
+                    if type(p2.ball_type) == list:
+                        p2.prev_len = len(p2.ball_type)
+
+                    trigger = True
+
                     if dx**2 + dy**2 >= 10000:
                         h = ((dx ** 2) + (dy ** 2)) ** 0.5
                         if not h == 0:
@@ -314,26 +334,129 @@ def main():
                     ball.velocity = (ball.velocity[0], -1 * ball.velocity[1])
                 friction(ball, FRICTION_FORCE/ball.shape.body.mass, dt)
 
-                # if type(p1.design) == list:
-                #     if p1.olddesign - len(p1.design) > 0 and p1.turn:
-                #         p1.turn = p1.turn
-                #         p2.turn = p2.turn
-                # if type(p2.design) == list:
-                #     if p2.olddesign - len(p2.design) > 0 and p2.turn:
-                #         p1.turn = p1.turn
-                #         p2.turn = p2.turn
+        ke = 0
+        for ball in balls:
+            ke = ke + .5 * ball.shape.body.mass * (np.linalg.norm(ball.velocity) ** 2)
+
+        if ke == 0 and trigger:
+            if len(eightball) == 0:
+                if p1.turn:
+                    if p1.ball_type == None:
+                        winner = 2
+                    elif len(p1.ball_type) > 0:
+                        winner = 2
+                    else:
+                        winner = 1
+                else:
+                    if p2.ball_type == None:
+                        winner = 1
+                    elif len(p2.ball_type) > 0:
+                        winner = 1
+                    else:
+                        winner = 2
+            else:
+                if len(balls) == 16:
+                    p1.turn = not p1.turn
+                    p2.turn = not p2.turn
+                    trigger = False
+                else:
+                    if prev_solids_len == 7 and len(solids) < 7:
+                        if p1.turn:
+                            p1.ball_type = solids
+                            p2.ball_type = stripes
+                            p1.text = "SOLIDS"
+                            p2.text = "STRIPES"
+                        else:
+                            p1.ball_type = stripes
+                            p2.ball_type = solids
+                            p1.text = "STRIPES"
+                            p2.text = "SOLIDS"
+                    if prev_stripes_len == 7 and len(stripes) < 7:
+                        if p1.turn:
+                            p1.ball_type = stripes
+                            p2.ball_type = solids
+                            p1.text = "STRIPES"
+                            p2.text = "SOLIDS"
+                        else:
+                            p1.ball_type = solids
+                            p2.ball_type = stripes
+                            p1.text = "SOLIDS"
+                            p2.text = "STRIPES"
+
+                    if p1.turn:
+                        if p1.prev_len - len(p1.ball_type) > 0:
+                            trigger = False
+                        else:
+                            p1.turn = False
+                            p2.turn = True
+                            trigger = False
+                    else:
+                        if p2.prev_len - len(p2.ball_type) > 0:
+                            trigger = False
+                        else:
+                            p1.turn = True
+                            p2.turn = False
+                            trigger = False
 
         screen.fill((0, 102, 0))
-        space.debug_draw(draw_options)
-        pygame.display.update()
-        space.step(dt)
-        ke = 0
+
         # x = 0
         # y = 0
         # n = len(balls)
+
+        pygame.draw.rect(screen, (75, 55, 28, 255), pygame.Rect(0,  -0.5 * BALL_RADIUS, WORLD_DIMS[0], BALL_RADIUS))
+        pygame.draw.rect(screen, (75, 55, 28, 255), pygame.Rect(0, WORLD_DIMS[1] - (0.5 * BALL_RADIUS), WORLD_DIMS[0], BALL_RADIUS))
+        pygame.draw.rect(screen, (75, 55, 28, 255), pygame.Rect(-0.5 * BALL_RADIUS, 0, BALL_RADIUS, WORLD_DIMS[1]))
+        pygame.draw.rect(screen, (75, 55, 28, 255), pygame.Rect(WORLD_DIMS[0] - (0.5 * BALL_RADIUS), 0, BALL_RADIUS, WORLD_DIMS[1]))
+
+        for i in range(6):
+            pygame.draw.circle(screen, (0, 0, 0, 255), (WORLD_DIMS[0] * ((i % 3) / 2), WORLD_DIMS[1] * (i // 3)), BALL_RADIUS * 1.5)
+
         for ball in balls:
             ball.shape.body.position = (ball.shape.body.position[0] + ball.velocity[0] * dt, ball.shape.body.position[1] + ball.velocity[1] * dt)
-            ke = ke + .5 * ball.shape.body.mass * (np.linalg.norm(ball.velocity) ** 2)
+            ball_rect = ball.surface.get_rect(center=(ball.shape.body.position[0], ball.shape.body.position[1]))
+            screen.blit(ball.surface, ball_rect)
+
+        if winner == 0:
+            p1text = my_font.render('PLAYER ONE', False, (0, 0, 0))
+            screen.blit(p1text, (2 * BALL_RADIUS, WORLD_DIMS[1] + BALL_RADIUS / 2))
+
+            p2text = my_font.render('PLAYER TWO', False, (0, 0, 0))
+            screen.blit(p2text, (WORLD_DIMS[0] - 2 * BALL_RADIUS - 200, WORLD_DIMS[1] + BALL_RADIUS / 2))
+
+            p1designtext = my_font.render(p1.text, False, (0, 0, 0))
+            screen.blit(p1designtext, (2 * BALL_RADIUS, WORLD_DIMS[1] + BALL_RADIUS / 2 + 30))
+
+            p2designtext = my_font.render(p2.text, False, (0, 0, 0))
+            screen.blit(p2designtext, (WORLD_DIMS[0] - 2 * BALL_RADIUS - 200, WORLD_DIMS[1] + BALL_RADIUS / 2 + 30))
+
+            if p1.turn:
+                turntext = my_font.render("<-- PLAYER ONE MOVE", False, (0, 0, 0))
+                screen.blit(turntext, (WORLD_DIMS[0] / 2 - 200, WORLD_DIMS[1] + BALL_RADIUS / 2 + 25))
+            else:
+                turntext = my_font.render("PLAYER TWO MOVE -->", False, (0, 0, 0))
+                screen.blit(turntext, (WORLD_DIMS[0] / 2 - 160, WORLD_DIMS[1] + BALL_RADIUS / 2 + 25))
+
+            instrtext = "CLICK ANYWHERE ON TABLE TO SET DIRECTION AND MAGNITUDE"
+            instrtext = small_font.render(instrtext, False, (0, 0, 0))
+            screen.blit(instrtext, (2 * BALL_RADIUS + 205, WORLD_DIMS[1] + BALL_RADIUS / 2 + 15 + 50))
+            instrtext = "(INCREASES WITH DISTANCE FROM CUEBALL) OF CUEBALL VELOCITY"
+            instrtext = small_font.render(instrtext, False, (0, 0, 0))
+            screen.blit(instrtext, (2 * BALL_RADIUS + 195, WORLD_DIMS[1] + BALL_RADIUS / 2 + 15 + 75))
+        else:
+            if winner == 1:
+                winnertext = my_font.render("PLAYER ONE WINS!!!", False, (0, 0, 0))
+                screen.blit(winnertext, (WORLD_DIMS[0] / 2 - 200, WORLD_DIMS[1] + BALL_RADIUS / 2 + 45))
+                instrtext = small_font.render("PRESS (q) to QUIT", False, (0, 0, 0))
+                screen.blit(instrtext, (WORLD_DIMS[0] / 2 - 100, WORLD_DIMS[1] + BALL_RADIUS / 2 + 85))
+            if winner == 2:
+                winnertext = my_font.render("PLAYER TWO WINS!!!", False, (0, 0, 0))
+                screen.blit(winnertext, (WORLD_DIMS[0] / 2 - 200, WORLD_DIMS[1] + BALL_RADIUS / 2 + 45))
+                instrtext = small_font.render("PRESS (q) to QUIT", False, (0, 0, 0))
+                screen.blit(instrtext, (WORLD_DIMS[0] / 2 - 100, WORLD_DIMS[1] + BALL_RADIUS / 2 + 85))
+
+        pygame.display.update()
+        space.step(dt)
     #         x = x + ball.shape.body.position[0]
     #         y = y + ball.shape.body.position[1]
     #     xs.append(x/n)
