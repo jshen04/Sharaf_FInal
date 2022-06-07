@@ -98,18 +98,18 @@ def initialize_holes(space):
 
 
 def detect_collisions(b1, b2):
-    return np.linalg.norm(b1.shape.body.position - b2.shape.body.position) <= 2 * BALL_RADIUS
+    return np.linalg.norm(b1.shape.body.position - b2.shape.body.position) <= 2 * BALL_RADIUS and (np.dot(b2.shape.body.position - b1.shape.body.position, b1.velocity) > 0 or np.dot(b1.shape.body.position - b2.shape.body.position, b2.velocity) > 0)
 
-def elastic_collision(b1, b2):
+def collision(b1, b2, e):
     m1 = b1.shape.body.mass
     m2 = b2.shape.body.mass
     v1x, v1y = b1.velocity
     v2x, v2y = b2.velocity
 
-    c1 = ((2 * m2) / (m1 + m2)) * np.dot((b1.velocity[0] - b2.velocity[0], b1.velocity[1] - b2.velocity[1]), (b1.shape.body.position - b2.shape.body.position)) / (np.linalg.norm(b1.shape.body.position - b2.shape.body.position) ** 2)
+    c1 = (((1+e) * m2) / (m1 + m2)) * np.dot((b1.velocity[0] - b2.velocity[0], b1.velocity[1] - b2.velocity[1]), (b1.shape.body.position - b2.shape.body.position)) / (np.linalg.norm(b1.shape.body.position - b2.shape.body.position) ** 2)
     v1f = (v1x - c1 * (b1.shape.body.position[0] - b2.shape.body.position[0]), v1y - c1 * (b1.shape.body.position[1] - b2.shape.body.position[1]))
 
-    c2 = ((2 * m1) / (m1 + m2)) * np.dot((b2.velocity[0] - b1.velocity[0], b2.velocity[1] - b1.velocity[1]), (b2.shape.body.position - b1.shape.body.position)) / (np.linalg.norm(b2.shape.body.position - b1.shape.body.position) ** 2)
+    c2 = (((1+e) * m1) / (m1 + m2)) * np.dot((b2.velocity[0] - b1.velocity[0], b2.velocity[1] - b1.velocity[1]), (b2.shape.body.position - b1.shape.body.position)) / (np.linalg.norm(b2.shape.body.position - b1.shape.body.position) ** 2)
     v2f = (v2x - c2 * (b2.shape.body.position[0] - b1.shape.body.position[0]), v2y - c2 * (b2.shape.body.position[1] - b1.shape.body.position[1]))
 
     b1.velocity = v1f
@@ -264,7 +264,7 @@ def main():
                 contact_pairs.append(pair)
 
         for pair in contact_pairs:
-            elastic_collision(pair[0], pair[1])
+            collision(pair[0], pair[1], 0)
 
         for ball in balls:
             x = ball.shape.body.position[0]
